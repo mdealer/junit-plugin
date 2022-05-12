@@ -145,8 +145,7 @@ public class CaseResult extends TestResult implements Comparable<CaseResult> {
             float duration,
             String stdout,
             String stderr,
-            String stacktrace,
-            boolean keepTestNames
+            String stacktrace
     ) {
         this.className = className;
         this.testName = testName;
@@ -159,7 +158,7 @@ public class CaseResult extends TestResult implements Comparable<CaseResult> {
         
         this.skipped = skippedMessage != null;
         this.skippedMessage = skippedMessage;
-        this.keepTestNames = keepTestNames;
+        this.keepTestNames = false;
     }
 
     CaseResult(SuiteResult parent, Element testCase, String testClassName, boolean keepLongStdio, boolean keepTestNames) {
