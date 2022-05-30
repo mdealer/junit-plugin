@@ -112,6 +112,7 @@ public final class TestResult extends MetaTabulatedResult {
     private transient List<CaseResult> failedTests;
 
     private final boolean keepLongStdio;
+    private final boolean keepTestNames;
 
     /**
      * Creates an empty result.
@@ -125,6 +126,7 @@ public final class TestResult extends MetaTabulatedResult {
      */
     public TestResult(boolean keepLongStdio) {
         this.keepLongStdio = keepLongStdio;
+        this.keepTestNames = false;
         impl = null;
     }
 
@@ -135,7 +137,7 @@ public final class TestResult extends MetaTabulatedResult {
 
     @Deprecated
     public TestResult(long buildTime, DirectoryScanner results, boolean keepLongStdio) throws IOException {
-        this(buildTime, results, keepLongStdio, null);
+        this(buildTime, results, keepLongStdio, false, null);
     }
 
     /**
@@ -145,9 +147,10 @@ public final class TestResult extends MetaTabulatedResult {
      * @param pipelineTestDetails A {@link PipelineTestDetails} instance containing Pipeline-related additional arguments.
      * @since 1.22
      */
-    public TestResult(long buildTime, DirectoryScanner results, boolean keepLongStdio,
+    public TestResult(long buildTime, DirectoryScanner results, boolean keepLongStdio, boolean keepTestNames,
                       PipelineTestDetails pipelineTestDetails) throws IOException {
         this.keepLongStdio = keepLongStdio;
+        this.keepTestNames = keepTestNames;
         impl = null;
         parse(buildTime, results, pipelineTestDetails);
     }
@@ -155,6 +158,7 @@ public final class TestResult extends MetaTabulatedResult {
     public TestResult(TestResultImpl impl) {
         this.impl = impl;
         keepLongStdio = false; // irrelevant
+        keepTestNames = false; // irrelevant
     }
 
     @CheckForNull
@@ -347,7 +351,7 @@ public final class TestResult extends MetaTabulatedResult {
             throw new IllegalStateException("Cannot reparse using a pluggable impl");
         }
         try {
-            for (SuiteResult suiteResult : SuiteResult.parse(reportFile, keepLongStdio, pipelineTestDetails))
+            for (SuiteResult suiteResult : SuiteResult.parse(reportFile, keepLongStdio, keepTestNames, pipelineTestDetails))
                 add(suiteResult);
         } catch (InterruptedException | RuntimeException e) {
             throw new IOException("Failed to read "+reportFile,e);
