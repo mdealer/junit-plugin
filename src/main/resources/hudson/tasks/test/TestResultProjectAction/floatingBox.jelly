@@ -39,7 +39,7 @@ THE SOFTWARE.
   </c:trend-setup>
 
   <c:trend-chart it="${from}" title="${%Test Result Trend}" enableLinks="true" configurationId="junit"/>
-
+  <p>Test Result Trend should be here</p>
   <script>
     function fillJunit(trendConfiguration, jsonConfiguration) {
       const useBlue = jsonConfiguration['useBlue'];
