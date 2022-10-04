@@ -139,6 +139,14 @@ public final class TestResult extends MetaTabulatedResult {
         impl = null;
     }
 
+    // Compatibility to XUnit plugin (and maybe more)
+    @Deprecated
+    public TestResult(long buildTime, boolean keepLongStdio) throws IOException {
+        this.keepLongStdio = keepLongStdio;
+        this.keepTestNames = false;
+        impl = null;
+    }
+
     @Deprecated
     public TestResult(long buildTime, DirectoryScanner results) throws IOException {
         this(buildTime, results, false);
