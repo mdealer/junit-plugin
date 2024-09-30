@@ -46,14 +46,12 @@ import java.io.IOException;
 import java.lang.ref.SoftReference;
 import java.lang.ref.WeakReference;
 import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.List;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
-import java.util.logging.Logger;
+import java.util.logging.Logger;import java.util.stream.Collectors;
 import jenkins.tasks.SimpleBuildStep;
 import jenkins.util.SystemProperties;
 import org.kohsuke.stapler.StaplerProxy;
@@ -131,7 +129,10 @@ public class TestResultAction extends AbstractTestResultAction<TestResultAction>
         if (run != null) {
             // persist the data
             try {
-                resultCache.put(getDataFilePath(), new SoftReference<TestResult>(result));
+                if (RESULT_CACHE_ENABLED) {
+                    cleanupResultCache();
+                    resultCache.put(getDataFilePath(), new SoftReference<TestResult>(result));
+                }
                 getDataFile().write(result);
             } catch (IOException e) {
                 e.printStackTrace(listener.fatalError("Failed to save the JUnit test result"));
@@ -262,12 +263,15 @@ public class TestResultAction extends AbstractTestResultAction<TestResultAction>
     static ConcurrentHashMap<String, SoftReference<TestResult>> resultCache = new ConcurrentHashMap<>();
     static Object syncObj = new Object();
     static long lastCleanupNs = 0;
+    static AtomicInteger cleanupCount = new AtomicInteger(0);
 
     static long LARGE_RESULT_CACHE_CLEANUP_INTERVAL_NS =
             SystemProperties.getLong(TestResultAction.class.getName() + ".LARGE_RESULT_CACHE_CLEANUP_INTERVAL_MS", 500L)
                     * 1000000L;
     static int LARGE_RESULT_CACHE_THRESHOLD =
             SystemProperties.getInteger(TestResultAction.class.getName() + ".LARGE_RESULT_CACHE_THRESHOLD", 1000);
+    static int MAX_RESULT_CACHE_ITEMS =
+            SystemProperties.getInteger(TestResultAction.class.getName() + ".MAX_RESULT_CACHE_ITEMS", 10000);
     static boolean RESULT_CACHE_ENABLED =
             SystemProperties.getBoolean(TestResultAction.class.getName() + ".RESULT_CACHE_ENABLED", true);
 
@@ -296,23 +300,56 @@ public class TestResultAction extends AbstractTestResultAction<TestResultAction>
         return r;
     }
 
+    private void cleanupResultCache() {
+        if (resultCache.size() > LARGE_RESULT_CACHE_THRESHOLD) {
+            try {
+                if (cleanupCount.incrementAndGet() == 1) {
+                    long nsSinceLastCleanup = System.nanoTime() - lastCleanupNs;
+                    if (nsSinceLastCleanup > LARGE_RESULT_CACHE_CLEANUP_INTERVAL_NS) {
+                        if (logger.isLoggable(Level.FINE)) {
+                            logger.log(Level.FINE, "Cleaning up resultCache map, items: " + resultCache.size() + ", threshold: " + LARGE_RESULT_CACHE_THRESHOLD + ", interval: " + LARGE_RESULT_CACHE_CLEANUP_INTERVAL_NS / (double)1000000000.0 + " seconds.");
+                        }
+                        lastCleanupNs = System.nanoTime();
+                        resultCache.forEach((String k, SoftReference<TestResult> v) -> {
+                            if (v.get() == null) {
+                                resultCache.remove(k);
+                            }
+                        });
+                        if (MAX_RESULT_CACHE_ITEMS > 0 && resultCache.size() > MAX_RESULT_CACHE_ITEMS) {
+                            int removeCount = Math.max(0, resultCache.size() - MAX_RESULT_CACHE_ITEMS);
+                            List<String> sortedKeys = resultCache.keySet().stream()
+                                .sorted(Comparator.comparingInt(key -> {
+                                    int pos1 = key.lastIndexOf("/builds/");
+                                    if (pos1 == -1) {
+                                        return 0;
+                                    }
+                                    pos1 += 8;
+                                    int pos2 = key.indexOf('/', pos1);
+                                    return Integer.parseInt(key.substring(pos1, pos2));
+                                }
+                                ))
+                                .limit(removeCount)
+                                .collect(Collectors.toList());
+                            if (logger.isLoggable(Level.FINE)) {
+                                logger.log(Level.FINE, "About to remove " + removeCount + " excess items from resultCache map, limit: " + MAX_RESULT_CACHE_ITEMS + ".");
+                            }
+                            sortedKeys.forEach((String k) -> {
+                                resultCache.remove(k);
+                            });
+                        }
+                    }
+                }
+            } finally {
+                cleanupCount.decrementAndGet();
+            }
+        }
+    }
+
     /**
      * Loads a {@link TestResult} from cache or disk, optimized.
      */
     private TestResult loadCached() {
-        if (resultCache.size() > LARGE_RESULT_CACHE_THRESHOLD) {
-            synchronized (syncObj) {
-                if (resultCache.size() > LARGE_RESULT_CACHE_THRESHOLD
-                        && (System.nanoTime() - lastCleanupNs) > LARGE_RESULT_CACHE_CLEANUP_INTERVAL_NS) {
-                    lastCleanupNs = System.nanoTime();
-                    resultCache.forEach((String k, SoftReference<TestResult> v) -> {
-                        if (v.get() == null) {
-                            resultCache.remove(k);
-                        }
-                    });
-                }
-            }
-        }
+        cleanupResultCache();
         TestResult r;
         String k = getDataFilePath();
         r = resultCache
