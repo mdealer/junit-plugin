@@ -525,7 +525,7 @@ public class TestResultStorageJunitTest {
                                     if (theJob != null) {
                                         Run<?, ?> run = theJob.getBuildByNumber(buildNumber);
                                         historyTestResultSummaries.add(
-                                                new HistoryTestResultSummary(run, duration, failed, skipped, passed));
+                                                new HistoryTestResultSummary(run, null, duration, failed, skipped, passed));
                                     }
                                 }
                                 return historyTestResultSummaries;
